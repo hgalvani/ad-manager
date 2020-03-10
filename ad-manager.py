@@ -1,8 +1,5 @@
 #! /usr/bin/python3
 # 
-# USAGE
-# $ python3 ad-manager.py 
-#
 # Author: hgalvani
 
 
@@ -16,15 +13,13 @@ import ssl
 AD_SERVER = '192.168.0.104'
 # AD_SERVER = 'srv-dc01.anterverse.com'
 AD_DOMAIN = 'ANTEVERSE'
-AD_BIND_USER = AD_DOMAIN + "\\ad-manager" # Use join
+AD_BIND_USER = AD_DOMAIN + "\\ad-manager"
 AD_BIND_PWD = 'P@ssword123'
 
 AD_BASEDN = 'DC=anteverse,DC=com'
-AD_USER_BASEDN = 'OU=SiteA,DC=anteverse,DC=com'
 AD_USER_FILTER = '(&(objectClass=USER)(sAMAccountName={username}))'
 AD_USER_FILTER2 = '(&(objectClass=USER)(dn={userdn}))'
 AD_GROUP_FILTER = '(&(objectClass=GROUP)(cn={group_name}))'
-
 
 # AD connection uncrypted, prefer ad_auth_ntlm_ssl()
 def ad_auth_ntlm(username=AD_BIND_USER, password=AD_BIND_PWD, address=AD_SERVER):
@@ -90,17 +85,20 @@ def isExist(connexion, username):
   search_base = AD_BASEDN
   search_filter = '(&(objectclass=person)(name={}))'.format(username)
   
-  # attributes=['sAMAccountName', 'cn', 'givenname']
+  classic_attributes = ['distinguishedName','sAMAccountName', 'cn', 'sn', 'givenname']
 
   # Get connection
   c = connexion
 
   try:
     # Perform the search
-    c.search(search_base, search_filter, attributes=['cn'])
+    c.search(search_base, search_filter, attributes=classic_attributes)
   except core.exceptions.LDAPInvalidFilterError:
     print("Invalid filter: {}".format(username_cn))
-    #sys.exit(1)  
+    #sys.exit(1)
+  except core.exceptions.LDAPAttributeError:
+    print("Invalid attribute")
+    #sys.exit(1)     
 
   # VERBOSE messages
   if VERBOSE:
@@ -116,26 +114,32 @@ def isExist(connexion, username):
 def ad_modify_password(connexion, username, password):
   # Get connection
   c = connexion
-  if isExist(c,username):
-    # Get connection
-    c = connexion
-    dn = 'CN={},OU=SiteA,DC=anteverse,DC=com'.format(username)
+  user = isExist(c,username)
+
+  if user:
+    # Get user dn and cast it to string
+    userdn = str(user[0].distinguishedName)
 
     try:
-      r = c.extend.microsoft.modify_password(dn, old_password=None, new_password=password)
-      print(r)
+      r = c.extend.microsoft.modify_password(userdn, old_password=None, new_password=password)
     except core.exceptions.LDAPNoSuchObjectResult:
-      print("Failed to find user with dn {}".format(dn))
-      #sys.exit(1)
+      print("Failed to find user with dn {}".format(userdn))
     except core.exceptions.LDAPUnwillingToPerformResult:
-      print("Unwilling to perform result : Is user dn {} validate ?".format(dn))
-      #sys.exit(1)  
+      print("Unwilling to perform result : Is user dn {} validate ?".format(userdn))
+
+  # VERBOSE messages
+  if VERBOSE:
+    print(r)
+  
+  # Return True if operation succesful
+  return r
+
+ 
 
 # Add User
 def add_user_account(connexion, firstname, lastname, sitename, teamname):
   
-  # lastname.upper()
-
+  # Set user qttributes
   username = firstname.title() + ' ' + lastname.upper()
   user_dn = 'CN={},OU={},OU={},{}'.format(username, teamname, sitename, AD_BASEDN)
   user_object_class = ['OrganizationalPerson', 'person', 'top', 'user']
@@ -147,8 +151,7 @@ def add_user_account(connexion, firstname, lastname, sitename, teamname):
   'mail': '{}.{}@anteverse.com'.format(firstname.lower(),lastname.lower()), \
   # 'userPrincipalName ': 'a.{}anteverse.com'.format(lastname.lower()), \
   'sAMAccountName': '{}.{}'.format(firstname.lower(),lastname.lower())}
-  # attributes=['sAMAccountName', 'cn', 'givenname']
-
+  
   # Get connection
   c = connexion
 
@@ -172,27 +175,37 @@ def add_user_account(connexion, firstname, lastname, sitename, teamname):
 # Unlock user account
 def ad_unlock_user_account(connexion, username):
   c = connexion
-  if isExist(c,username):
-    user_dn = 'CN={},OU=SiteA,DC=anteverse,DC=com'.format(username)
+  user = isExist(c,username)
+
+  if user:
+    # Get user dn and cast it to string
+    user_dn = str(user[0].distinguishedName)
+
     try:
       c.modify(user_dn, {'userAccountControl': [(MODIFY_REPLACE, ['512'])]})
-      print(c.result)
     except core.exceptions.LDAPNoSuchObjectResult:
-      print("Failed to find user with dn {}".format(user_dn))
+      print('Failed to find user with dn {}'.format(user_dn))
       #sys.exit(1)
     except core.exceptions.LDAPInvalidValueError:
-      print("Non valid attribute value set. Please recheck expected type")
+      print('Non valid attribute value set. Please recheck expected type')
       #sys.exit(1)
     except core.exceptions.LDAPUnwillingToPerformResult:
-      print("Unwilling to perform result : Have set user password first ?")
+      print('Unwilling to perform result : Have set user password first ?')
       #sys.exit(1)  
   else:
-    print("{} does not exist".format(username))
+    print('{} does not exist'.format(username))
+
+  # VERBOSE messages
+  if VERBOSE:
+    print(c.result)
+
+  # Return True if search succed  
+  return c.result 
 
 # Main
 if __name__ == "__main__":
 
-
+  # Manage Option command line
   parser = argparse.ArgumentParser(description='Manage user in AD.',
                                    epilog="Ex : python3 ad-manager.py --create-user --firstname Agnes --lastname DUPONTEL --sitename SiteA --teamname Direction")
   parser.add_argument('-v', '--verbose', action='store_true',
@@ -212,7 +225,8 @@ if __name__ == "__main__":
   # Get connection
   c = ad_auth_ntlm_ssl()
 
-  # Create and activate user
-  args.add_user_account(c, args.firstname, args.lastname, args.sitename, args.teamname)
-  # ad_modify_password(c, 'Agnes DUPONTEL', 'AliceDupond2')
-  # ad_unlock_user_account(c,'Agnes DUPONTEL')
+  # Create user account, change password and unlock it 
+  args.add_user_account(c, args.firstname.title(), args.lastname.upper(), args.sitename, args.teamname.title())
+  username = args.firstname.title() + ' ' + args.lastname.upper()
+  ad_modify_password(c, username, 'AliceDupond2')
+  ad_unlock_user_account(c, username)
