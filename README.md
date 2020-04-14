@@ -3,7 +3,7 @@ AD-MANAGER
 
 Description
 -----------
-This project aims to more easily manage some commom actions in Active Directory like create a user.
+This project aims to more easily manage some common actions in Active Directory like create a user.
 
 Installation
 -------------
