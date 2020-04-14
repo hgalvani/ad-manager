@@ -3,19 +3,21 @@
 # Author: hgalvani
 
 
-# import class and constants
+# import class
 from ldap3 import Server, Connection, ALL, NTLM, Tls, SUBTREE, core, extend, MODIFY_REPLACE
 import sys
 import argparse
 import ssl
+import random
+import string
 
-# Variables
+
+# Constants
 AD_SERVER = '192.168.0.104'
-# AD_SERVER = 'srv-dc01.anterverse.com'
 AD_DOMAIN = 'ANTEVERSE'
 AD_BIND_USER = AD_DOMAIN + "\\ad-manager"
 AD_BIND_PWD = 'P@ssword123'
-
+AD_DNS = 'anteverse.com'
 AD_BASEDN = 'DC=anteverse,DC=com'
 AD_USER_FILTER = '(&(objectClass=USER)(sAMAccountName={username}))'
 AD_USER_FILTER2 = '(&(objectClass=USER)(dn={userdn}))'
@@ -107,7 +109,6 @@ def isExist(connexion, username):
   # Return True if search succed  
   return c.entries
 
-
 # Modify password
 # You *must* use encrypted connection (i.e. LDAPS or StartSSL).
 # AD doesn’t allow changing password via unencrypted connection.
@@ -131,10 +132,11 @@ def ad_modify_password(connexion, username, password):
   if VERBOSE:
     print(r)
   
+  # Display set password
+  print("Password set is : {}".format(password))
+
   # Return True if operation succesful
   return r
-
- 
 
 # Add User
 def add_user_account(connexion, firstname, lastname, sitename, teamname):
@@ -148,8 +150,7 @@ def add_user_account(connexion, firstname, lastname, sitename, teamname):
   'displayName': '{}'.format(username), \
   'givenName': '{}'.format(firstname.title()), \
   'sn': '{}'.format(lastname.upper()), \
-  'mail': '{}.{}@anteverse.com'.format(firstname.lower(),lastname.lower()), \
-  # 'userPrincipalName ': 'a.{}anteverse.com'.format(lastname.lower()), \
+  'mail': '{}.{}@{}'.format(firstname.lower(),lastname.lower(),AD_DNS), \
   'sAMAccountName': '{}.{}'.format(firstname.lower(),lastname.lower())}
   
   # Get connection
@@ -158,6 +159,7 @@ def add_user_account(connexion, firstname, lastname, sitename, teamname):
   try:
     # Perform the Add operation
     c.add(user_dn, user_object_class, user_attributes)
+    c.modify(user_dn, {'userPrincipalName': [(MODIFY_REPLACE, ['{}.{}@{}'.format(firstname.lower(),lastname.lower(),AD_DNS)])]})
   except core.exceptions.LDAPEntryAlreadyExistsResult:
     print("Entry Already Exists")
     #sys.exit(1)
@@ -168,6 +170,10 @@ def add_user_account(connexion, firstname, lastname, sitename, teamname):
   # VERBOSE messages
   if VERBOSE:
     print(c.entries)
+
+  # Display set password
+  if isExist(c,username):
+    print('User {} has been created '.format(username))  
 
   # Return True if search succed  
   return c.entries
@@ -202,6 +208,12 @@ def ad_unlock_user_account(connexion, username):
   # Return True if search succed  
   return c.result 
 
+# Generate a random string of letters, digits and punctuation
+def generatepaswd(stringLength=8):
+    password_characters = string.ascii_letters + string.digits + string.punctuation
+    return ''.join(random.choice(password_characters) for i in range(stringLength))
+
+
 # Main
 if __name__ == "__main__":
 
@@ -228,5 +240,8 @@ if __name__ == "__main__":
   # Create user account, change password and unlock it 
   args.add_user_account(c, args.firstname.title(), args.lastname.upper(), args.sitename, args.teamname.title())
   username = args.firstname.title() + ' ' + args.lastname.upper()
-  ad_modify_password(c, username, 'AliceDupond2')
+  ad_modify_password(c, username, generatepaswd())
   ad_unlock_user_account(c, username)
+
+  # close the connection
+  c.unbind()
