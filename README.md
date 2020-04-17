@@ -5,6 +5,11 @@ Description
 -----------
 This project aims to more easily manage some common actions in Active Directory like create a user.
 
+Licence
+-------
+The ad-manager project is open source software released under the GPL v3 license. Copyright 2020 Harold GALVANI
+* Quick Guide : https://www.gnu.org/licenses/quick-guide-gplv3.html
+
 Installation
 -------------
 ad-manager is based on ldap3 library.
@@ -53,5 +58,5 @@ LDAP3
 -----
 ldap3 is a strictly RFC 4510 conforming LDAP V3 pure Python client library. The same codebase runs in Python 2, Python 3, PyPy and PyPy3.
 
-* Sources :https://github.com/cannatag/ldap3
+* Sources : https://github.com/cannatag/ldap3
 * Documentation : http://ldap3.readthedocs.io
